@@ -1,0 +1,244 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jar Escape Game</title>
+
+
+<style>
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #f0f0f0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: sans-serif;
+}
+
+
+#jar-container {
+    position: relative;
+    background-color: #ffffff; /* white background */
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+    width: 350px; 
+    height: 650px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+
+#jar {
+    width: 250px;
+    height: 300px;
+    position: relative;
+    z-index: 2; /* physics canvas above jar image */
+    transform: translateY(18%);
+    border-radius: 80px;  /* rounds corners */
+    overflow: hidden;      /* clips the canvas inside rounded corners */
+}
+
+
+#jar-front {
+    width: 250px;
+    height: 390px;
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-image: url("https://i.pinimg.com/474x/e6/0a/d9/e60ad9c994c955541d5abffabb3a85f4.jpg");
+    background-size: cover;
+    background-position: center;
+    pointer-events: none;
+    z-index: 1; /* behind shapes */
+}
+
+
+canvas {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    z-index: 2;
+}
+
+
+#chair {
+    width: 300px;
+    margin-top: 10px;
+    transform: translateY(80%);
+}
+
+
+#refresh-btn {
+    cursor:pointer; 
+    font-size:36px; 
+    display:inline-flex; 
+    align-items:center; 
+    justify-content:center; 
+    width:70px; 
+    height:70px; 
+    background:#ffcc00; 
+    border-radius:50%; 
+    color:#000; 
+    box-shadow:0 4px 8px rgba(0,0,0,0.3);
+    margin-top: 10px;
+    transform: translateY(90%);
+}
+
+
+#message {
+    color:red; 
+    font-weight:bold; 
+    font-size:18px; 
+    margin-top: 10px;
+    transform: translateY(300%);
+}
+
+
+@media (max-width: 400px) {
+    #chair { width: 200px; }
+    #jar, #jar-front { width: 200px; height: 267px; }
+    #refresh-btn { width:60px; height:60px; font-size:30px; }
+}
+</style>
+</head>
+<body>
+
+
+<div id="jar-container">
+    <div id="jar-front"></div>
+    <div id="jar"></div>
+    <img id="chair" src="https://media.discordapp.net/attachments/866227717874516018/1415419001328107590/Screenshot_2025-09-11_at_03.11.54.png?ex=68c3232b&is=68c1d1ab&hm=e390b7e42840f553dce5f1d9ccb40e12a630c8113c8cc68011938cb59d99c93a&=&format=webp&quality=lossless&width=2120&height=704" alt="Chair">
+    <span id="refresh-btn" title="Refresh Jar">&#x21bb;</span>
+    <div id="message"></div>
+</div>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<script>
+const { Engine, Render, Runner, Bodies, Composite, Mouse, MouseConstraint, Body } = Matter;
+
+
+const jar = document.getElementById("jar");
+const message = document.getElementById("message");
+const refreshBtn = document.getElementById("refresh-btn");
+
+
+let engine, render, runner;
+let shapes = [];
+
+
+// Helper functions
+function randomPosition(w, h) {
+    const padding = 20;
+    const x = Math.random() * (jar.clientWidth - w - padding*2) + padding + w/2;
+    const y = Math.random() * (jar.clientHeight - h - padding*2) + padding + h/2;
+    return { x, y };
+}
+
+
+function createImage(x, y, w, h, imgSrc) {
+    return Bodies.rectangle(x, y, w*1.2, h*1.2, { restitution: 0.4, friction: 0.3, render: { sprite: { texture: imgSrc, xScale: w / 200, yScale: h / 200 } } });
+}
+
+
+// Spawn shapes and make them jump
+function spawnShapes() {
+    shapes.forEach(s => clearInterval(s.jumpInterval));
+    shapes = [
+        (() => { const p = randomPosition(50,50); return createImage(p.x,p.y,50,50,"https://i.pinimg.com/originals/a1/8b/7c/a18b7c5d9e858e74d612c72aed94e5cc.webp"); })(),
+        (() => { const p = randomPosition(45,45); return createImage(p.x,p.y,45,45,"https://i.pinimg.com/originals/35/47/90/35479056744b0ad87f55bfd3a88fa7e9.webp"); })(),
+        (() => { const p = randomPosition(45,45); return createImage(p.x,p.y,45,45,"https://i.pinimg.com/originals/50/ae/57/50ae5736688822e67822cb61392e0cf7.png"); })(),
+        (() => { const p = randomPosition(40,40); return createImage(p.x,p.y,40,40,"https://pbs.twimg.com/profile_images/1694667062201782272/BxsyxWTE_400x400.png"); })(),
+        (() => { const p = randomPosition(40,40); return createImage(p.x,p.y,40,40,"https://upload-os-bbs.hoyolab.com/upload/2022/11/23/4f79ffc83b2d667280c4088d2186d71c_7411300337195544969.png?x-oss-process=image%2Fauto-orient%2C0%2Finterlace%2C1%2Fformat%2Cwebp%2Fquality%2Cq_70"); })()
+    ];
+    Composite.add(engine.world, shapes);
+
+
+    // Jump for each shape
+    shapes.forEach(shape => {
+        function jump() {
+            const minForce = -0.008;
+            const maxForce = -0.08;
+            const jumpForce = minForce + Math.random()*(maxForce-minForce);
+            Body.applyForce(shape, shape.position, { x: 0, y: jumpForce });
+        }
+        shape.jumpInterval = setInterval(jump, 2000 + Math.random()*4000);
+    });
+}
+
+
+// Initialize jar
+function initJar() {
+    jar.innerHTML = "";
+    message.innerText = "";
+    
+    engine = Engine.create();
+    render = Render.create({
+        element: jar,
+        engine: engine,
+        options: { width: jar.clientWidth, height: jar.clientHeight, wireframes: false, background: "transparent" }
+    });
+
+
+    const wallThickness = 10;
+    const walls = [
+        Bodies.rectangle(jar.clientWidth/2, jar.clientHeight - wallThickness/2, jar.clientWidth, wallThickness, { isStatic:true, render:{visible:false} }),
+        Bodies.rectangle(wallThickness/2, jar.clientHeight/2, wallThickness, jar.clientHeight, { isStatic:true, render:{visible:false} }),
+        Bodies.rectangle(jar.clientWidth - wallThickness/2, jar.clientHeight/2, wallThickness, jar.clientHeight, { isStatic:true, render:{visible:false} })
+    ];
+    Composite.add(engine.world, walls);
+
+
+    spawnShapes();
+
+
+    const mouse = Mouse.create(render.canvas);
+    const mouseConstraint = MouseConstraint.create(engine, { mouse, constraint:{ stiffness:0.2, render:{visible:false} } });
+    Composite.add(engine.world, mouseConstraint);
+
+
+    Render.run(render);
+    runner = Runner.create();
+    Runner.run(runner, engine);
+
+
+    // Check in-jar status
+    setInterval(() => {
+        let inJarCount = shapes.filter(shape => 
+            shape.position.y <= jar.clientHeight && shape.position.x >= 0 && shape.position.x <= jar.clientWidth
+        ).length;
+
+
+        if(inJarCount === 0) {
+            message.innerText = "Congrats! They're free 🎉";
+            message.style.color = "green";
+        } else if(inJarCount < shapes.length) {
+            message.innerText = "Oh No! Some are escaping!";
+            message.style.color = "red";
+        } else {
+            message.innerText = "";
+        }
+    }, 200);
+}
+
+
+// First load
+initJar();
+
+
+// Refresh
+refreshBtn.addEventListener("click", () => {
+    Composite.remove(engine.world, shapes);
+    spawnShapes();
+});
+</script>
+
+
+</body>
+</html>
